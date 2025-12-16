@@ -1,0 +1,13 @@
+﻿## Visual Studio
+.vs/
+*.suo
+*.user
+
+## .NET Core
+bin/
+obj/
+*.csproj.user
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
