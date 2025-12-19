@@ -53,9 +53,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// Add DbContext
-builder.Services.AddDbContext<LibraryContext>(options =>
-    options.UseInMemoryDatabase("LibraryDb"));
+
+if (builder.Environment.IsDevelopment())
+{
+    // Use SQL Server locally
+    builder.Services.AddDbContext<LibraryContext>(options =>
+        options.UseSqlServer(builder.Configuration.GetConnectionString("LibraryDb")));
+}
+else
+{
+    // Use SQLite in Azure
+    builder.Services.AddDbContext<LibraryContext>(options =>
+        options.UseSqlite(builder.Configuration.GetConnectionString("LibraryDb")));
+}
 
 // Add Repositories
 builder.Services.AddScoped<IBookRepository, BookRepository>();
@@ -92,14 +102,19 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(8080); // Azure uses port 8080
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
-{
+
+
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+
 
 //app.UseHttpsRedirection();
 app.UseCors("AllowAll");
@@ -173,13 +188,10 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// FORCE HTTP FOR TESTING (temporary fix for SSL issues)
-app.Urls.Clear();
-app.Urls.Add("http://localhost:5000");
-app.Urls.Add("http://0.0.0.0:5000");
-
-Console.WriteLine("🚀 Application started on http://localhost:5000");
-Console.WriteLine("📚 Swagger UI: http://localhost:5000/swagger");
-Console.WriteLine("📖 Books API: http://localhost:5000/api/books");
+// Let Azure control the port via environment variables
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+Console.WriteLine($"🚀 Application started on port {port}");
+Console.WriteLine("📚 Swagger UI: /swagger");
+Console.WriteLine("📖 Books API: /api/books");
 
 app.Run();
