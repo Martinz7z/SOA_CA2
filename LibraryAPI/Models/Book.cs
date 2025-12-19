@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace LibraryAPI.Models
 {
     public class Book
@@ -9,8 +11,13 @@ namespace LibraryAPI.Models
 
         // Foreign key for Author
         public int AuthorId { get; set; }
+        public int? GenreId { get; set; }
 
         // Navigation property
+        [ForeignKey("AuthorId")]
         public Author? Author { get; set; }
+
+        [ForeignKey("GenreId")]
+        public Genre Genre { get; set; }
     }
 }

@@ -5,6 +5,7 @@ namespace LibraryAPI.DTOs
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public int BookCount { get; set; }
         public List<BookDTO> Books { get; set; } = new List<BookDTO>();
     }
 

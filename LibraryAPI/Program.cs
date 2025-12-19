@@ -10,8 +10,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddControllers();
+// Add CORS policy
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        builder =>
+        {
+            builder.AllowAnyOrigin()
+                   .AllowAnyMethod()
+                   .AllowAnyHeader();
+        });
+});
 
-// SIMPLIFIED JWT Configuration - Less Strict
+// JWT Configuration
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -22,10 +33,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes("LibraryAPISecretKey12345678901234567890")) // 32 chars!
+                Encoding.UTF8.GetBytes("LibraryAPISecretKey12345678901234567890"))
         };
 
-        // For debugging
         options.Events = new JwtBearerEvents
         {
             OnAuthenticationFailed = context =>
@@ -47,8 +57,9 @@ builder.Services.AddAuthorization();
 builder.Services.AddDbContext<LibraryContext>(options =>
     options.UseInMemoryDatabase("LibraryDb"));
 
-// Add Repository
+// Add Repositories
 builder.Services.AddScoped<IBookRepository, BookRepository>();
+builder.Services.AddScoped<IAuthorRepository, AuthorRepository>();
 
 // Add Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -56,7 +67,6 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "Library API", Version = "v1" });
 
-    // Add Bearer token support to Swagger
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
@@ -91,12 +101,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
-// IMPORTANT ORDER: Authentication before Authorization
+//app.UseHttpsRedirection();
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 // Seed database
@@ -105,8 +113,12 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<LibraryContext>();
     context.Database.EnsureCreated();
 
+    // Only seed if no authors exist (fresh database)
     if (!context.Authors.Any())
     {
+        Console.WriteLine("🌱 Seeding database...");
+
+        // 1. Seed Authors FIRST
         var authors = new[]
         {
             new Author { Id = 1, Name = "J.K. Rowling", Email = "jk@example.com" },
@@ -115,7 +127,9 @@ using (var scope = app.Services.CreateScope())
         };
         context.Authors.AddRange(authors);
         context.SaveChanges();
+        Console.WriteLine("✅ Authors seeded");
 
+        // 2. Seed Books WITHOUT GenreId first (GenreId is nullable)
         var books = new[]
         {
             new Book { Id = 1, Title = "Harry Potter", ISBN = "123456", PublicationYear = 1997, AuthorId = 1 },
@@ -124,11 +138,48 @@ using (var scope = app.Services.CreateScope())
         };
         context.Books.AddRange(books);
         context.SaveChanges();
+        Console.WriteLine("✅ Books seeded (no genres yet)");
 
-        Console.WriteLine("✅ Database seeded successfully");
+        // 3. Seed Genres
+        var genres = new[]
+        {
+            new Genre { Id = 1, Name = "Fantasy", Description = "Fantasy literature" },
+            new Genre { Id = 2, Name = "Science Fiction", Description = "Sci-fi books" },
+            new Genre { Id = 3, Name = "Classic", Description = "Classic literature" },
+            new Genre { Id = 4, Name = "Mystery", Description = "Mystery and thriller" }
+        };
+        context.Genres.AddRange(genres);
+        context.SaveChanges();
+        Console.WriteLine("✅ Genres seeded");
+
+        // 4. Now assign genres to existing books
+        // Get fresh references to avoid tracking issues
+        var book1 = context.Books.Find(1);
+        var book2 = context.Books.Find(2);
+        var book3 = context.Books.Find(3);
+
+        if (book1 != null) book1.GenreId = 1; // Harry Potter → Fantasy
+        if (book2 != null) book2.GenreId = 2; // 1984 → Science Fiction  
+        if (book3 != null) book3.GenreId = 3; // Pride and Prejudice → Classic
+
+        context.SaveChanges();
+        Console.WriteLine("✅ Genres assigned to books");
+
+        Console.WriteLine("🎉 Database seeding completed successfully!");
+    }
+    else
+    {
+        Console.WriteLine("📊 Database already has data, skipping seed");
     }
 }
 
-Console.WriteLine("🚀 Application started. Testing JWT...");
+// FORCE HTTP FOR TESTING (temporary fix for SSL issues)
+app.Urls.Clear();
+app.Urls.Add("http://localhost:5000");
+app.Urls.Add("http://0.0.0.0:5000");
+
+Console.WriteLine("🚀 Application started on http://localhost:5000");
+Console.WriteLine("📚 Swagger UI: http://localhost:5000/swagger");
+Console.WriteLine("📖 Books API: http://localhost:5000/api/books");
 
 app.Run();
